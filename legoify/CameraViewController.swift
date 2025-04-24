@@ -8,24 +8,59 @@
 import UIKit
 import AVFoundation
 
-class CameraViewController: UIViewController, AVCapturePhotoCaptureDelegate {
+class CameraViewController: UIViewController, AVCapturePhotoCaptureDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate{
     
     var capturedImage: UIImage?
-        
+    var usingFrontCamera = false
     var photoOutput = AVCapturePhotoOutput()
+    var captureSession: AVCaptureSession!
+    var previewLayer: AVCaptureVideoPreviewLayer!
+    var videoInput: AVCaptureDeviceInput!
 
+        
+    @IBOutlet weak var captureButton: UIButton!
     @IBOutlet weak var cameraView: UIView!
-
+    @IBOutlet weak var selectFromGalleryButton: UIButton!
+    @IBOutlet weak var switchCameraButton: UIButton!
+    
+    @IBAction func selectFromGallery(_ sender: UIButton) {
+        let picker = UIImagePickerController()
+        picker.delegate = self
+        picker.sourceType = .photoLibrary
+        present(picker, animated: true)
+    }
+    @IBAction func switchCameraTapped(_ sender: UIButton) {
+        guard let currentInput = captureSession.inputs.first as? AVCaptureDeviceInput else { return }
+        
+        captureSession.beginConfiguration()
+        captureSession.removeInput(currentInput)
+        
+        usingFrontCamera.toggle()
+        let newPosition: AVCaptureDevice.Position = usingFrontCamera ? .front : .back
+        if let newDevice = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: newPosition), let newInput = try? AVCaptureDeviceInput(device: newDevice) {
+            captureSession.addInput(newInput)
+            videoInput = newInput
+        } else {
+            captureSession.addInput(currentInput)
+        }
+        captureSession.commitConfiguration()
+    }
     @IBAction func capturePhoto(_ sender: UIButton) {
+        sender.isEnabled = false // Prevent spamming
+        let activity = UIActivityIndicatorView(style: .medium)
+            activity.center = sender.center
+            sender.superview?.addSubview(activity)
+            activity.startAnimating()
         let settings = AVCapturePhotoSettings()
         photoOutput.capturePhoto(with: settings, delegate: self)
     }
     
-    var captureSession: AVCaptureSession!
-    var previewLayer: AVCaptureVideoPreviewLayer!
+   
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        captureButton.setImage(UIImage(named: "cameraButton"), for: .normal)
+        captureButton.setImage(UIImage(named: "cameraButtonPressed"), for: .highlighted)
         setupCamera()
     }
     func setupCamera() {
@@ -73,7 +108,17 @@ class CameraViewController: UIViewController, AVCapturePhotoCaptureDelegate {
         }
         
         capturedImage = image
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         performSegue(withIdentifier: "toLoading", sender: self)
+        CATransaction.commit()
+    }
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true)
+        if let image = info[.originalImage] as? UIImage {
+            capturedImage = image
+            performSegue(withIdentifier: "toLoading", sender: self)
+        }
     }
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         if segue.identifier == "toLoading",
